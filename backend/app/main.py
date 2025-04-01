@@ -8,6 +8,11 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from .middleware import error_handler
 import datetime
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -31,19 +36,19 @@ app.middleware("http")(error_handler)
 # Store active connections
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: List[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket, client_id: str):
+    async def connect(self, websocket: WebSocket):
         await websocket.accept()
-        self.active_connections[client_id] = websocket
+        self.active_connections.append(websocket)
+        logger.info(f"Client connected. Total connections: {len(self.active_connections)}")
 
-    def disconnect(self, client_id: str):
-        if client_id in self.active_connections:
-            del self.active_connections[client_id]
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+        logger.info(f"Client disconnected. Total connections: {len(self.active_connections)}")
 
-    async def send_message(self, message: str, client_id: str):
-        if client_id in self.active_connections:
-            await self.active_connections[client_id].send_text(message)
+    async def send_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
 
 manager = ConnectionManager()
 
@@ -88,34 +93,37 @@ async def chat_endpoint(chat_request: ChatRequest):
         )
 
 @app.websocket("/api/chat/ws")
-async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
-    if not client_id:
-        client_id = str(id(websocket))
-    
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
     try:
-        await manager.connect(websocket, client_id)
-        print(f"Client {client_id} connected")  # Debug log
-        
         while True:
             try:
+                # Receive message
                 data = await websocket.receive_text()
-                print(f"Received message from {client_id}: {data}")  # Debug log
-                
+                logger.info(f"Received message: {data}")
+
+                # Parse the message
                 try:
                     message_data = json.loads(data)
                     content = message_data.get("content", "")
-                except json.JSONDecodeError:
-                    content = data
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON: {e}")
+                    await websocket.send_json({
+                        "response": None,
+                        "error": "Invalid message format"
+                    })
+                    continue
 
                 # Validate OpenAI API key
                 if not client.api_key:
-                    await manager.send_message(
-                        json.dumps({"error": "OpenAI API key not configured"}),
-                        client_id
-                    )
+                    logger.error("OpenAI API key not configured")
+                    await websocket.send_json({
+                        "response": None,
+                        "error": "OpenAI API key not configured"  # Make sure error is a string
+                    })
                     continue
 
-                # Process message with OpenAI
+                # Call OpenAI API
                 try:
                     response = client.chat.completions.create(
                         model="gpt-3.5-turbo",
@@ -125,32 +133,30 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
                     )
                     
                     response_text = response.choices[0].message.content
-                    print(f"AI response: {response_text}")  # Debug log
+                    logger.info(f"AI response generated: {response_text[:100]}...")
                     
-                    # Send response back to client
-                    response_data = json.dumps({
+                    await websocket.send_json({
                         "response": response_text,
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "error": None
                     })
-                    await websocket.send_text(response_data)
-                    print(f"Sent response to {client_id}")  # Debug log
                     
                 except Exception as e:
-                    error_msg = str(e)
-                    print(f"Error processing message: {error_msg}")  # Debug log
-                    await websocket.send_text(json.dumps({
-                        "error": error_msg,
-                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    }))
+                    logger.error(f"OpenAI API error: {str(e)}")
+                    await websocket.send_json({
+                        "response": None,
+                        "error": f"AI service error: {str(e)}"
+                    })
 
+            except WebSocketDisconnect:
+                manager.disconnect(websocket)
+                break
             except Exception as e:
-                print(f"Error in message loop: {str(e)}")  # Debug log
-                await websocket.send_text(json.dumps({
-                    "error": str(e),
-                    "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }))
-                
-    except WebSocketDisconnect:
-        manager.disconnect(client_id)
-        print(f"Client {client_id} disconnected")  # Debug log
+                logger.error(f"Unexpected error: {str(e)}")
+                await websocket.send_json({
+                    "response": None,
+                    "error": f"Unexpected error: {str(e)}"
+                })
+
+    except Exception as e:
+        logger.error(f"Connection error: {str(e)}")
+        manager.disconnect(websocket)
