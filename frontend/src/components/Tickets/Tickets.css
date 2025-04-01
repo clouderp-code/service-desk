@@ -1,0 +1,21 @@
+.tickets {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.tickets h2 {
+  margin: 0 0 24px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.tickets-content {
+  padding: 20px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+} 
