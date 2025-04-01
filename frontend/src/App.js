@@ -1,12 +1,10 @@
 import React from 'react';
 import Chat from './components/Chat';
+import './App.css';
 
 function App() {
   return (
-    <div>
-      <h1 style={{ textAlign: 'center', margin: '20px 0' }}>
-        Chat Application
-      </h1>
+    <div className="app-container">
       <Chat />
     </div>
   );
