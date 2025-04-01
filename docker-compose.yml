@@ -1,4 +1,4 @@
-version: '3.8'
+version: '3'
 
 services:
   frontend:
@@ -8,11 +8,15 @@ services:
     container_name: service-desk-frontend
     ports:
       - "3000:3000"
+    environment:
+      - PORT=3000
     depends_on:
       - backend
     networks:
       - app-network
     restart: unless-stopped
+    env_file:
+      - .env
 
   backend:
     build: ./backend
@@ -24,12 +28,19 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ENVIRONMENT=development
+      - PORT=8000
+      - HOST=0.0.0.0
+      - WORKERS=1
+      - RELOAD=true
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - chromadb
     networks:
       - app-network
     restart: unless-stopped
-
+    env_file:
+      - .env
+  
   chromadb:
     image: chromadb/chroma
     container_name: service-desk-chromadb
@@ -40,7 +51,9 @@ services:
     networks:
       - app-network
     restart: unless-stopped
-
+    env_file:
+      - .env
+  
 networks:
   app-network:
     driver: bridge

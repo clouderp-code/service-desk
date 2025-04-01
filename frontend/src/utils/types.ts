@@ -16,3 +16,9 @@ export interface AnalyticsData {
   userSatisfaction: number;
   queryCount: number;
 }
+
+export interface ChatResponse {
+  id: string;
+  text: string;
+  error?: string;
+}
