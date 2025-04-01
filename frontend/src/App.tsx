@@ -4,7 +4,7 @@ import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import Header from './components/Layout/Header';
 import Sidebar from './components/Layout/Sidebar';
 import HomePage from './pages/HomePage';
-import ChatPage from './pages/ChatPage';
+import Chat from './components/Chat';
 import KnowledgeBasePage from './pages/KnowledgeBasePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 
@@ -30,7 +30,7 @@ const App: React.FC = () => {
           <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8 }}>
             <Routes>
               <Route path="/" element={<HomePage />} />
-              <Route path="/chat" element={<ChatPage />} />
+              <Route path="/chat" element={<Chat />} />
               <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
             </Routes>

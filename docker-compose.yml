@@ -10,6 +10,8 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
+      - NEXT_PUBLIC_BACKEND_URL=http://213.210.36.2:8000
+      - NEXT_PUBLIC_WS_URL=ws://213.210.36.2:8000
     depends_on:
       - backend
     networks:
@@ -32,6 +34,7 @@ services:
       - HOST=0.0.0.0
       - WORKERS=1
       - RELOAD=true
+      - ALLOWED_ORIGINS=http://213.210.36.2:3000
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - chromadb
