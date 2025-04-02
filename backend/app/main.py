@@ -1,162 +1,85 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Dict
-import json
-import os
-from dotenv import load_dotenv
-from openai import OpenAI
-from .middleware import error_handler
-import datetime
+from fastapi import FastAPI
 import logging
+import sys
+import os
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
+# Basic FastAPI app
 app = FastAPI()
 
-# Load environment variables
-load_dotenv()
-
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Allow all origins in development
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.middleware("http")(error_handler)
-
-# Store active connections
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info(f"Client connected. Total connections: {len(self.active_connections)}")
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-        logger.info(f"Client disconnected. Total connections: {len(self.active_connections)}")
-
-    async def send_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-
-manager = ConnectionManager()
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-class ChatRequest(BaseModel):
-    messages: List[ChatMessage]
-
-class ChatResponse(BaseModel):
-    response: str
-    error: str = None
+# Simple logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 @app.get("/")
 async def root():
-    return {"message": "Service Desk API is running"}
+    """Root endpoint"""
+    return {"status": "ok"}
 
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat_endpoint(chat_request: ChatRequest):
+@app.get("/api/health")
+async def health():
+    """Health check endpoint"""
+    return {"status": "healthy"}
+
+@app.get("/api/test/env")
+async def test_env():
+    """Test environment and OpenAI key"""
     try:
-        # Validate OpenAI API key
-        if not client.api_key:
-            raise HTTPException(status_code=500, detail="OpenAI API key not configured")
-
-        # Convert messages to OpenAI format
-        messages = [{"role": msg.role, "content": msg.content} for msg in chat_request.messages]
-
-        # Call OpenAI API
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages
-        )
-
-        return ChatResponse(
-            response=response.choices[0].message.content
-        )
+        api_key = os.getenv("OPENAI_API_KEY")
+        return {
+            "status": "ok",
+            "openai_key_exists": bool(api_key),
+            "key_length": len(api_key) if api_key else 0
+        }
     except Exception as e:
-        return ChatResponse(
-            response="",
-            error=str(e)
-        )
+        logger.error(f"Environment test failed: {e}")
+        return {"status": "error", "message": str(e)}
 
-@app.websocket("/api/chat/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
+@app.get("/api/test/imports")
+async def test_imports():
+    """Test importing required packages"""
+    results = {}
     try:
-        while True:
-            try:
-                # Receive message
-                data = await websocket.receive_text()
-                logger.info(f"Received message: {data}")
+        # Test langchain import
+        try:
+            import langchain
+            results["langchain"] = "ok"
+        except ImportError as e:
+            results["langchain"] = str(e)
 
-                # Parse the message
-                try:
-                    message_data = json.loads(data)
-                    content = message_data.get("content", "")
-                except json.JSONDecodeError as e:
-                    logger.error(f"Invalid JSON: {e}")
-                    await websocket.send_json({
-                        "response": None,
-                        "error": "Invalid message format"
-                    })
-                    continue
+        # Test OpenAI import
+        try:
+            import openai
+            results["openai"] = "ok"
+        except ImportError as e:
+            results["openai"] = str(e)
 
-                # Validate OpenAI API key
-                if not client.api_key:
-                    logger.error("OpenAI API key not configured")
-                    await websocket.send_json({
-                        "response": None,
-                        "error": "OpenAI API key not configured"  # Make sure error is a string
-                    })
-                    continue
-
-                # Call OpenAI API
-                try:
-                    response = client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=[
-                            {"role": "user", "content": content}
-                        ]
-                    )
-                    
-                    response_text = response.choices[0].message.content
-                    logger.info(f"AI response generated: {response_text[:100]}...")
-                    
-                    await websocket.send_json({
-                        "response": response_text,
-                        "error": None
-                    })
-                    
-                except Exception as e:
-                    logger.error(f"OpenAI API error: {str(e)}")
-                    await websocket.send_json({
-                        "response": None,
-                        "error": f"AI service error: {str(e)}"
-                    })
-
-            except WebSocketDisconnect:
-                manager.disconnect(websocket)
-                break
-            except Exception as e:
-                logger.error(f"Unexpected error: {str(e)}")
-                await websocket.send_json({
-                    "response": None,
-                    "error": f"Unexpected error: {str(e)}"
-                })
-
+        return {
+            "status": "ok",
+            "import_results": results
+        }
     except Exception as e:
-        logger.error(f"Connection error: {str(e)}")
-        manager.disconnect(websocket)
+        logger.error(f"Import test failed: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/test/embedding")
+async def test_embedding():
+    """Test OpenAI embeddings"""
+    try:
+        from langchain.embeddings import OpenAIEmbeddings
+        
+        embeddings = OpenAIEmbeddings()
+        test_text = "Hello, world!"
+        
+        # Try to generate an embedding
+        result = embeddings.embed_query(test_text)
+        
+        return {
+            "status": "ok",
+            "embedding_size": len(result),
+            "sample": result[:3]  # First 3 dimensions
+        }
+    except Exception as e:
+        logger.error(f"Embedding test failed: {e}")
+        return {"status": "error", "message": str(e)}
+
+# Remove all other endpoints for now
