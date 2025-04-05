@@ -21,5 +21,8 @@ RUN pip install --upgrade pip && \
 # Copy the rest of the application
 COPY . .
 
+# Add the app directory to PYTHONPATH
+ENV PYTHONPATH=/app
+
 # Run with debug logging
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]

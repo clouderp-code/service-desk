@@ -40,7 +40,7 @@ function Chat() {
   const handleSendMessage = (message) => {
     if (!message.trim() || !ws) return;
 
-    ws.send(JSON.stringify({ content: message }));
+    ws.send(JSON.stringify({ message: message }));
     setMessages(prev => [...prev, {
       text: message,
       timestamp: new Date().toLocaleTimeString(),
