@@ -12,7 +12,7 @@ class QueryEngine:
             embedding_function=self.embeddings
         )
         self.chat_memory = ChatMemory()
-        self.llm = ChatOpenAI(temperature=0.7, model_name="gpt-4")
+        self.llm = ChatOpenAI(temperature=0.7, model_name="gpt-4o-mini")
 
     async def query(self, question: str):
         try:

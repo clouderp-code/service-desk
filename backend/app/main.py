@@ -164,7 +164,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 # Get OpenAI response
                 response = await openai.ChatCompletion.acreate(
-                    model="gpt-3.5-turbo",
+                    model="gpt-4o-mini",
                     messages=messages,
                     temperature=0.0  # Set to 0 for more focused answers
                 )
