@@ -49,3 +49,4 @@ ENV/
 # Logs
 logs/
 *.log
+backend/test_chroma_db/
