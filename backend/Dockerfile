@@ -16,13 +16,13 @@ COPY requirements.txt .
 
 # Install Python packages
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install -r requirements.txt
 
 # Copy the rest of the application
 COPY . .
 
 # Add the app directory to PYTHONPATH
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:${PYTHONPATH}
 
 # Run with debug logging
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

@@ -33,3 +33,4 @@ htmlcov/
 
 # ChromaDB
 .chroma/
+test_chroma_db/

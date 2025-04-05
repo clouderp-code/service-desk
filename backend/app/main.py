@@ -5,6 +5,7 @@ import logging
 import json
 import openai
 import os
+from app.rag.initialize_rag import RAGInitializer
 
 # Basic FastAPI app
 app = FastAPI()
@@ -197,5 +198,41 @@ async def websocket_endpoint(websocket: WebSocket):
                 
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")
+
+@app.post("/api/initialize-rag")
+async def initialize_rag():
+    """Initialize or update the RAG system with PDF files."""
+    try:
+        initializer = RAGInitializer(
+            pdf_dir="/app/data",
+            db_dir="/app/chroma_db"
+        )
+        
+        # Get initial state
+        initial_info = initializer.get_store_info()
+        
+        # Initialize vector store
+        success = initializer.initialize_vector_store()
+        
+        if success:
+            # Get updated state
+            final_info = initializer.get_store_info()
+            return {
+                "status": "success",
+                "initial_state": initial_info,
+                "final_state": final_info
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to initialize vector store",
+                "initial_state": initial_info
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 # Remove all other endpoints for now
