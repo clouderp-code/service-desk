@@ -115,7 +115,7 @@ class TestRAG:
     def test_qa_chain(self, vector_store):
         """Test QA chain functionality"""
         qa_chain = RetrievalQA.from_chain_type(
-            llm=OpenAI(model="gpt-3.5-turbo-instruct"),
+            llm=OpenAI(model="gpt-4o-mini"),
             chain_type="stuff",
             retriever=vector_store.as_retriever()
         )

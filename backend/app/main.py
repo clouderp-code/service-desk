@@ -6,6 +6,8 @@ import json
 import openai
 import os
 from app.rag.initialize_rag import RAGInitializer
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
 
 # Basic FastAPI app
 app = FastAPI()
@@ -104,7 +106,7 @@ async def chat(message: ChatMessage):
             return ChatResponse(error="No message provided")
 
         response = await openai.ChatCompletion.acreate(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[{"role": m["role"], "content": m["content"]} for m in message.messages]
         )
         
@@ -121,32 +123,11 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             try:
-                # Get and log the raw message
-                raw_data = await websocket.receive_text()
-                logger.info(f"Raw data received: {raw_data}")
+                # Get message
+                data = await websocket.receive_text()
+                parsed_data = json.loads(data)
                 
-                # Check OpenAI API key first
-                if not os.getenv("OPENAI_API_KEY"):
-                    await websocket.send_json({
-                        "error": "OpenAI API key not configured",
-                        "response": None
-                    })
-                    continue
-
-                # Parse and validate JSON
-                try:
-                    parsed_data = json.loads(raw_data)
-                except json.JSONDecodeError:
-                    await websocket.send_json({
-                        "error": "Invalid JSON format",
-                        "response": None
-                    })
-                    continue
-                
-                logger.info(f"Parsed data: {parsed_data}")
-                
-                # Validate message format
-                if not isinstance(parsed_data, dict) or "message" not in parsed_data:
+                if "message" not in parsed_data:
                     await websocket.send_json({
                         "error": "Message must contain 'message' key",
                         "response": None
@@ -154,50 +135,59 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                 
                 user_message = parsed_data["message"]
-                logger.info(f"User message: {user_message}")
                 
-                # Create OpenAI message format
-                openai_messages = [
-                    {"role": "user", "content": user_message}
-                ]
-                logger.info(f"OpenAI messages: {openai_messages}")
-                
-                try:
-                    # Call OpenAI
-                    response = await openai.ChatCompletion.acreate(
-                        model="gpt-3.5-turbo",
-                        messages=openai_messages
-                    )
-                    
-                    # Send response
-                    ai_response = response.choices[0].message.content
-                    logger.info(f"AI response: {ai_response}")
-                    
+                # Get context from RAG
+                context = await get_rag_context(user_message)
+                if not context:
                     await websocket.send_json({
-                        "error": None,
-                        "response": ai_response
-                    })
-                except Exception as e:
-                    # Return the exact error message from the exception
-                    error_message = str(e)
-                    logger.error(f"OpenAI API error: {error_message}")
-                    await websocket.send_json({
-                        "error": error_message,  # Changed from "OpenAI API error" to the actual error message
+                        "error": "No relevant information found in the documents",
                         "response": None
                     })
-                    
-            except WebSocketDisconnect:
-                logger.info("WebSocket disconnected")
-                break
+                    continue
+                
+                # Create messages for OpenAI with strict instructions
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """You are an AI assistant that ONLY answers questions based on the provided context. 
+                        If the context doesn't contain enough information to answer the question, say 'I don't have enough information in the provided documents to answer this question.'
+                        Do not make up information or use external knowledge.
+                        
+                        Context:
+                        {context}""".format(context=context)
+                    },
+                    {"role": "user", "content": user_message}
+                ]
+                
+                logger.info(f"Context used: {context}")
+                logger.info(f"Messages sent to OpenAI: {messages}")
+                
+                # Get OpenAI response
+                response = await openai.ChatCompletion.acreate(
+                    model="gpt-3.5-turbo",
+                    messages=messages,
+                    temperature=0.0  # Set to 0 for more focused answers
+                )
+                
+                await websocket.send_json({
+                    "error": None,
+                    "response": response.choices[0].message.content
+                })
+                
+            except json.JSONDecodeError:
+                await websocket.send_json({
+                    "error": "Invalid JSON format",
+                    "response": None
+                })
             except Exception as e:
-                logger.error(f"Server error: {str(e)}")
+                logger.error(f"Error in websocket: {str(e)}")
                 await websocket.send_json({
                     "error": str(e),
                     "response": None
                 })
                 
-    except Exception as e:
-        logger.error(f"WebSocket error: {str(e)}")
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
 
 @app.post("/api/initialize-rag")
 async def initialize_rag():
@@ -229,6 +219,125 @@ async def initialize_rag():
                 "initial_state": initial_info
             }
             
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/api/debug-rag")
+async def debug_rag():
+    """Debug endpoint to check RAG system state"""
+    try:
+        vector_store = Chroma(
+            persist_directory="/app/chroma_db",
+            embedding_function=OpenAIEmbeddings()
+        )
+        
+        # Get collection stats
+        collection = vector_store._collection
+        
+        # Get a sample document to verify content
+        sample_results = vector_store.similarity_search(
+            "what is this document about",
+            k=1
+        )
+        
+        return {
+            "status": "success",
+            "document_count": collection.count(),
+            "sample_content": sample_results[0].page_content if sample_results else None,
+            "embedding_function": str(vector_store._embedding_function),
+            "persist_directory": vector_store._persist_directory
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+async def get_rag_context(query: str) -> str:
+    """Get relevant context from RAG for the query"""
+    try:
+        vector_store = Chroma(
+            persist_directory="/app/chroma_db",
+            embedding_function=OpenAIEmbeddings()
+        )
+        
+        # Get more relevant documents and with higher similarity threshold
+        docs = vector_store.similarity_search_with_score(
+            query, 
+            k=3,  # Get top 3 most relevant chunks
+            score_threshold=0.7  # Only return relatively good matches
+        )
+        
+        if not docs:
+            logger.warning(f"No relevant documents found for query: {query}")
+            return ""
+        
+        # Combine context from documents, including relevance scores
+        context_parts = []
+        for doc, score in docs:
+            logger.info(f"Document chunk (score {score}): {doc.page_content}")
+            context_parts.append(doc.page_content)
+            
+        context = "\n\nRelevant passage:\n".join(context_parts)
+        return context
+        
+    except Exception as e:
+        logger.error(f"Error getting RAG context: {str(e)}")
+        return ""
+
+@app.post("/api/clean-and-init-rag")
+async def clean_and_init_rag():
+    """Clean and reinitialize the RAG system"""
+    try:
+        from app.clean_and_init_db import clean_vector_store, verify_pdf_directory
+        from app.rag.initialize_rag import RAGInitializer
+        
+        pdf_dir = "/app/data"
+        db_dir = "/app/chroma_db"
+        
+        # Verify PDF directory
+        pdf_files = verify_pdf_directory(pdf_dir)
+        if not pdf_files:
+            return {
+                "status": "error",
+                "message": "No PDF files found or invalid directory"
+            }
+        
+        # Clean existing vector store
+        if not clean_vector_store(db_dir):
+            return {
+                "status": "error",
+                "message": "Failed to clean vector store"
+            }
+        
+        # Initialize new vector store
+        initializer = RAGInitializer(pdf_dir=pdf_dir, db_dir=db_dir)
+        
+        # Get initial state
+        initial_info = initializer.get_store_info()
+        
+        # Initialize vector store
+        success = initializer.initialize_vector_store()
+        if not success:
+            return {
+                "status": "error",
+                "message": "Failed to initialize vector store"
+            }
+        
+        # Get final state
+        final_info = initializer.get_store_info()
+        
+        return {
+            "status": "success",
+            "message": "Vector store reinitialized successfully",
+            "initial_state": initial_info,
+            "final_state": final_info
+        }
+        
     except Exception as e:
         return {
             "status": "error",
