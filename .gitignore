@@ -49,4 +49,25 @@ ENV/
 # Logs
 logs/
 *.log
+backend/test_chroma_db/index/
+backend/test_chroma_db/chroma_data/
 backend/test_chroma_db/
+chroma_db/chroma-collections.parquet
+chroma_db/chroma-embeddings.parquet
+backend/test_chroma_db/index/*
+backend/test_chroma_db/chroma_data/*
+chroma_db/index/uuid_to_id_6117d5bd-656e-4fc8-a9c5-4fe8d336860d.pkl
+chroma_db/index/index_metadata_6117d5bd-656e-4fc8-a9c5-4fe8d336860d.pkl
+chroma_db/index/index_6117d5bd-656e-4fc8-a9c5-4fe8d336860d.bin
+chroma_db/index/id_to_uuid_6117d5bd-656e-4fc8-a9c5-4fe8d336860d.pkl
+backend/test_chroma_db/index/uuid_to_id_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
+backend/test_chroma_db/index/index_metadata_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
+backend/test_chroma_db/index/index_metadata_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
+backend/test_chroma_db/index/index_metadata_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
+backend/test_chroma_db/index/index_061d2d6c-4789-476c-8b04-4e7a175d4b3a.bin
+backend/test_chroma_db/index/id_to_uuid_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
+backend/test_chroma_db/index/index_061d2d6c-4789-476c-8b04-4e7a175d4b3a.bin
+backend/test_chroma_db/index/index_metadata_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
+backend/test_chroma_db/index/id_to_uuid_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
+backend/test_chroma_db/index/id_to_uuid_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
+backend/test_chroma_db/index/id_to_uuid_061d2d6c-4789-476c-8b04-4e7a175d4b3a.pkl
