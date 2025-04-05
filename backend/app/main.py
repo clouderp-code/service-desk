@@ -124,16 +124,33 @@ async def websocket_endpoint(websocket: WebSocket):
                 raw_data = await websocket.receive_text()
                 logger.info(f"Raw data received: {raw_data}")
                 
-                # Parse and log the JSON
-                parsed_data = json.loads(raw_data)
+                # Check OpenAI API key first
+                if not os.getenv("OPENAI_API_KEY"):
+                    await websocket.send_json({
+                        "error": "OpenAI API key not configured",
+                        "response": None
+                    })
+                    continue
+
+                # Parse and validate JSON
+                try:
+                    parsed_data = json.loads(raw_data)
+                except json.JSONDecodeError:
+                    await websocket.send_json({
+                        "error": "Invalid JSON format",
+                        "response": None
+                    })
+                    continue
+                
                 logger.info(f"Parsed data: {parsed_data}")
                 
-                # Check if we have a message
-                if not isinstance(parsed_data, dict):
-                    raise ValueError(f"Expected dict, got {type(parsed_data)}")
-                
-                if "message" not in parsed_data:
-                    raise ValueError(f"Missing 'message' key. Keys received: {list(parsed_data.keys())}")
+                # Validate message format
+                if not isinstance(parsed_data, dict) or "message" not in parsed_data:
+                    await websocket.send_json({
+                        "error": "Message must contain 'message' key",
+                        "response": None
+                    })
+                    continue
                 
                 user_message = parsed_data["message"]
                 logger.info(f"User message: {user_message}")
@@ -144,39 +161,40 @@ async def websocket_endpoint(websocket: WebSocket):
                 ]
                 logger.info(f"OpenAI messages: {openai_messages}")
                 
-                # Call OpenAI
-                response = await openai.ChatCompletion.acreate(
-                    model="gpt-3.5-turbo",
-                    messages=openai_messages
-                )
-                
-                # Send response
-                ai_response = response.choices[0].message.content
-                logger.info(f"AI response: {ai_response}")
-                
-                await websocket.send_json({
-                    "error": None,
-                    "response": ai_response
-                })
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON decode error: {str(e)}")
-                await websocket.send_json({
-                    "error": f"Invalid JSON format: {str(e)}",
-                    "response": None
-                })
-            except ValueError as e:
-                logger.error(f"Validation error: {str(e)}")
-                await websocket.send_json({
-                    "error": str(e),
-                    "response": None
-                })
+                try:
+                    # Call OpenAI
+                    response = await openai.ChatCompletion.acreate(
+                        model="gpt-3.5-turbo",
+                        messages=openai_messages
+                    )
+                    
+                    # Send response
+                    ai_response = response.choices[0].message.content
+                    logger.info(f"AI response: {ai_response}")
+                    
+                    await websocket.send_json({
+                        "error": None,
+                        "response": ai_response
+                    })
+                except Exception as e:
+                    # Return the exact error message from the exception
+                    error_message = str(e)
+                    logger.error(f"OpenAI API error: {error_message}")
+                    await websocket.send_json({
+                        "error": error_message,  # Changed from "OpenAI API error" to the actual error message
+                        "response": None
+                    })
+                    
+            except WebSocketDisconnect:
+                logger.info("WebSocket disconnected")
+                break
             except Exception as e:
-                logger.error(f"Error processing message: {str(e)}")
+                logger.error(f"Server error: {str(e)}")
                 await websocket.send_json({
                     "error": str(e),
                     "response": None
                 })
+                
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")
 
