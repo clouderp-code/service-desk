@@ -11,6 +11,7 @@ hnswlib==0.7.0  # Specific older version that has pre-built wheels
 
 # PDF processing
 pdfplumber==0.10.2
+pypdf==3.17.1
 
 # Utilities
 python-dotenv==0.19.0
